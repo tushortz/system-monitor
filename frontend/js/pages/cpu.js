@@ -91,7 +91,7 @@ function renderCoreGrid(perCore) {
 
 function renderCharts(history, grouped) {
   const container = document.getElementById("charts");
-  container.innerHTML = `
+  ensureChartLayout(container, `
     <div class="chart-panel full-width">
       <div class="chart-title">CPU Utilization Over Time</div>
       <div class="chart-container tall"><canvas id="chart-cpu-util"></canvas></div>
@@ -111,13 +111,13 @@ function renderCharts(history, grouped) {
     <div class="chart-panel">
       <div class="chart-title">Performance Snapshot</div>
       <div class="chart-container"><canvas id="chart-radar"></canvas></div>
-    </div>`;
+    </div>`);
 
   const utilHist = historyToDatasets(history, {
     cpu_utilization: { label: "CPU %", color: CHART_COLORS.success },
   });
-  destroyChart(charts.util);
-  charts.util = createLineChart(
+  charts.util = upsertLineChart(
+    charts.util,
     document.getElementById("chart-cpu-util"),
     utilHist.labels,
     utilHist.datasets,
@@ -127,16 +127,16 @@ function renderCharts(history, grouped) {
   const loadHist = historyToDatasets(history, {
     load_normalized: { label: "Load %", color: CHART_COLORS.warning },
   });
-  destroyChart(charts.load);
-  charts.load = createLineChart(
+  charts.load = upsertLineChart(
+    charts.load,
     document.getElementById("chart-load"),
     loadHist.labels,
     loadHist.datasets
   );
 
   const perCore = grouped.utilization.per_core_pct || [];
-  destroyChart(charts.cores);
-  charts.cores = createBarChart(
+  charts.cores = upsertBarChart(
+    charts.cores,
     document.getElementById("chart-cores"),
     perCore.map((_, i) => `Core ${i}`),
     [{
@@ -148,8 +148,8 @@ function renderCharts(history, grouped) {
   );
 
   const times = grouped.utilization.times_pct || {};
-  destroyChart(charts.times);
-  charts.times = createDoughnutChart(
+  charts.times = upsertDoughnutChart(
+    charts.times,
     document.getElementById("chart-times"),
     ["User", "System", "Idle", "IOWait"],
     [times.user || 0, times.system || 0, times.idle || 0, times.iowait || 0],
@@ -157,8 +157,8 @@ function renderCharts(history, grouped) {
   );
 
   const u = grouped.utilization;
-  destroyChart(charts.radar);
-  charts.radar = createRadarChart(
+  charts.radar = upsertRadarChart(
+    charts.radar,
     document.getElementById("chart-radar"),
     ["CPU", "User", "System", "IOWait", "Idle"],
     [u.overall_pct || 0, times.user || 0, times.system || 0, times.iowait || 0, times.idle || 0]

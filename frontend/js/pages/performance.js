@@ -81,7 +81,7 @@ function renderStatCards(perf, power) {
 
 function renderCharts(history, grouped) {
   const container = document.getElementById("charts");
-  container.innerHTML = `
+  ensureChartLayout(container, `
     <div class="chart-panel full-width">
       <div class="chart-title">Utilization Over Time</div>
       <div class="chart-container tall"><canvas id="chart-util"></canvas></div>
@@ -105,7 +105,7 @@ function renderCharts(history, grouped) {
     <div class="chart-panel">
       <div class="chart-title">Clock Speeds (MHz)</div>
       <div class="chart-container"><canvas id="chart-clocks"></canvas></div>
-    </div>`;
+    </div>`);
 
   const utilCfg = {
     gpu_utilization: { label: "GPU %", color: CHART_COLORS.accent },
@@ -113,8 +113,8 @@ function renderCharts(history, grouped) {
   };
   const { labels: utilLabels, datasets: utilDatasets } = historyToDatasets(history, utilCfg);
 
-  destroyChart(charts.util);
-  charts.util = createLineChart(
+  charts.util = upsertLineChart(
+    charts.util,
     document.getElementById("chart-util"),
     utilLabels,
     utilDatasets,
@@ -124,8 +124,8 @@ function renderCharts(history, grouped) {
   const tempHist = historyToDatasets(history, {
     temperature: { label: "Temperature", color: CHART_COLORS.danger },
   });
-  destroyChart(charts.temp);
-  charts.temp = createLineChart(
+  charts.temp = upsertLineChart(
+    charts.temp,
     document.getElementById("chart-temp"),
     tempHist.labels,
     tempHist.datasets
@@ -134,8 +134,8 @@ function renderCharts(history, grouped) {
   const powerHist = historyToDatasets(history, {
     power: { label: "Power", color: CHART_COLORS.warning },
   });
-  destroyChart(charts.power);
-  charts.power = createLineChart(
+  charts.power = upsertLineChart(
+    charts.power,
     document.getElementById("chart-power"),
     powerHist.labels,
     powerHist.datasets
@@ -144,8 +144,8 @@ function renderCharts(history, grouped) {
   const fanHist = historyToDatasets(history, {
     fan_speed: { label: "Fan", color: CHART_COLORS.teal },
   });
-  destroyChart(charts.fan);
-  charts.fan = createLineChart(
+  charts.fan = upsertLineChart(
+    charts.fan,
     document.getElementById("chart-fan"),
     fanHist.labels,
     fanHist.datasets,
@@ -153,8 +153,8 @@ function renderCharts(history, grouped) {
   );
 
   const p = grouped.performance;
-  destroyChart(charts.radar);
-  charts.radar = createRadarChart(
+  charts.radar = upsertRadarChart(
+    charts.radar,
     document.getElementById("chart-radar"),
     ["GPU Util", "Mem Util", "Fan", "Temp %", "Power %"],
     [
@@ -167,8 +167,8 @@ function renderCharts(history, grouped) {
   );
 
   const clocks = p.clocks_mhz || {};
-  destroyChart(charts.clocks);
-  charts.clocks = createBarChart(
+  charts.clocks = upsertBarChart(
+    charts.clocks,
     document.getElementById("chart-clocks"),
     ["Graphics", "Memory", "SM"],
     [{

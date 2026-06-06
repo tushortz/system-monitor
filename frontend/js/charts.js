@@ -5,6 +5,7 @@ Chart.defaults.color = "#545454";
 Chart.defaults.borderColor = "#e2e2e2";
 Chart.defaults.plugins.legend.labels.usePointStyle = true;
 Chart.defaults.plugins.legend.labels.padding = 16;
+Chart.defaults.animation = false;
 
 const CHART_COLORS = {
   accent: "#276ef1",
@@ -15,12 +16,25 @@ const CHART_COLORS = {
   teal: "#0d7474",
 };
 
+const CHART_UPDATE_MODE = "none";
+
 /**
  * Destroy a chart instance safely.
  * @param {Chart|null} chart
  */
 function destroyChart(chart) {
   if (chart) chart.destroy();
+}
+
+/**
+ * Insert chart markup once; skip on later refreshes to avoid canvas flicker.
+ * @param {HTMLElement|null} container
+ * @param {string} html
+ */
+function ensureChartLayout(container, html) {
+  if (!container || container.dataset.chartLayout === "ready") return;
+  container.innerHTML = html;
+  container.dataset.chartLayout = "ready";
 }
 
 /**
@@ -45,6 +59,28 @@ function lineDataset(label, data, color) {
 }
 
 /**
+ * Update an existing line chart in place.
+ * @param {Chart} chart
+ * @param {string[]} labels
+ * @param {object[]} datasets
+ */
+function updateLineChart(chart, labels, datasets) {
+  chart.data.labels = labels;
+  datasets.forEach((ds, i) => {
+    if (chart.data.datasets[i]) {
+      chart.data.datasets[i].data = ds.data;
+      chart.data.datasets[i].label = ds.label;
+      if (ds.borderColor !== undefined) chart.data.datasets[i].borderColor = ds.borderColor;
+      if (ds.backgroundColor !== undefined) chart.data.datasets[i].backgroundColor = ds.backgroundColor;
+    } else {
+      chart.data.datasets.push({ ...ds });
+    }
+  });
+  chart.data.datasets.length = datasets.length;
+  chart.update(CHART_UPDATE_MODE);
+}
+
+/**
  * Create a line chart on a canvas.
  * @param {HTMLCanvasElement} canvas
  * @param {string[]} labels
@@ -59,6 +95,7 @@ function createLineChart(canvas, labels, datasets, options = {}) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       interaction: { mode: "index", intersect: false },
       plugins: {
         legend: { position: "top" },
@@ -77,6 +114,37 @@ function createLineChart(canvas, labels, datasets, options = {}) {
       ...options,
     },
   });
+}
+
+/**
+ * Create or update a line chart without visible refresh.
+ * @param {Chart|null} existing
+ * @param {HTMLCanvasElement|null} canvas
+ * @param {string[]} labels
+ * @param {object[]} datasets
+ * @param {object} [options]
+ * @returns {Chart|null}
+ */
+function upsertLineChart(existing, canvas, labels, datasets, options = {}) {
+  if (!canvas) return existing;
+  if (existing?.canvas === canvas) {
+    updateLineChart(existing, labels, datasets);
+    return existing;
+  }
+  destroyChart(existing);
+  return createLineChart(canvas, labels, datasets, options);
+}
+
+/**
+ * Update an existing doughnut chart in place.
+ * @param {Chart} chart
+ * @param {string[]} labels
+ * @param {number[]} data
+ */
+function updateDoughnutChart(chart, labels, data) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = data;
+  chart.update(CHART_UPDATE_MODE);
 }
 
 /**
@@ -102,12 +170,54 @@ function createDoughnutChart(canvas, labels, data, colors) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       cutout: "65%",
       plugins: {
         legend: { position: "bottom" },
       },
     },
   });
+}
+
+/**
+ * Create or update a doughnut chart without visible refresh.
+ * @param {Chart|null} existing
+ * @param {HTMLCanvasElement|null} canvas
+ * @param {string[]} labels
+ * @param {number[]} data
+ * @param {string[]} colors
+ * @returns {Chart|null}
+ */
+function upsertDoughnutChart(existing, canvas, labels, data, colors) {
+  if (!canvas) return existing;
+  if (existing?.canvas === canvas) {
+    updateDoughnutChart(existing, labels, data);
+    return existing;
+  }
+  destroyChart(existing);
+  return createDoughnutChart(canvas, labels, data, colors);
+}
+
+/**
+ * Update an existing bar chart in place.
+ * @param {Chart} chart
+ * @param {string[]} labels
+ * @param {object[]} datasets
+ */
+function updateBarChart(chart, labels, datasets) {
+  chart.data.labels = labels;
+  datasets.forEach((ds, i) => {
+    if (chart.data.datasets[i]) {
+      chart.data.datasets[i].data = ds.data;
+      chart.data.datasets[i].label = ds.label;
+      if (ds.backgroundColor !== undefined) chart.data.datasets[i].backgroundColor = ds.backgroundColor;
+      if (ds.borderRadius !== undefined) chart.data.datasets[i].borderRadius = ds.borderRadius;
+    } else {
+      chart.data.datasets.push({ ...ds });
+    }
+  });
+  chart.data.datasets.length = datasets.length;
+  chart.update(CHART_UPDATE_MODE);
 }
 
 /**
@@ -124,6 +234,7 @@ function createBarChart(canvas, labels, datasets) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       plugins: { legend: { display: datasets.length > 1 } },
       scales: {
         x: { grid: { display: false } },
@@ -131,6 +242,36 @@ function createBarChart(canvas, labels, datasets) {
       },
     },
   });
+}
+
+/**
+ * Create or update a bar chart without visible refresh.
+ * @param {Chart|null} existing
+ * @param {HTMLCanvasElement|null} canvas
+ * @param {string[]} labels
+ * @param {object[]} datasets
+ * @returns {Chart|null}
+ */
+function upsertBarChart(existing, canvas, labels, datasets) {
+  if (!canvas) return existing;
+  if (existing?.canvas === canvas) {
+    updateBarChart(existing, labels, datasets);
+    return existing;
+  }
+  destroyChart(existing);
+  return createBarChart(canvas, labels, datasets);
+}
+
+/**
+ * Update an existing radar chart in place.
+ * @param {Chart} chart
+ * @param {string[]} labels
+ * @param {number[]} data
+ */
+function updateRadarChart(chart, labels, data) {
+  chart.data.labels = labels;
+  chart.data.datasets[0].data = data;
+  chart.update(CHART_UPDATE_MODE);
 }
 
 /**
@@ -157,6 +298,7 @@ function createRadarChart(canvas, labels, data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       scales: {
         r: {
           beginAtZero: true,
@@ -168,6 +310,24 @@ function createRadarChart(canvas, labels, data) {
       plugins: { legend: { display: false } },
     },
   });
+}
+
+/**
+ * Create or update a radar chart without visible refresh.
+ * @param {Chart|null} existing
+ * @param {HTMLCanvasElement|null} canvas
+ * @param {string[]} labels
+ * @param {number[]} data
+ * @returns {Chart|null}
+ */
+function upsertRadarChart(existing, canvas, labels, data) {
+  if (!canvas) return existing;
+  if (existing?.canvas === canvas) {
+    updateRadarChart(existing, labels, data);
+    return existing;
+  }
+  destroyChart(existing);
+  return createRadarChart(canvas, labels, data);
 }
 
 /**

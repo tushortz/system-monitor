@@ -189,6 +189,22 @@ function progressClass(pct) {
 }
 
 /**
+ * Update an existing progress bar in place.
+ * @param {HTMLElement|null} bar
+ * @param {number} pct
+ */
+function updateProgressBar(bar, pct) {
+  if (!bar) return;
+  const safe = Math.min(100, Math.max(0, pct || 0));
+  bar.setAttribute("aria-valuenow", safe);
+  const fill = bar.querySelector(".progress-fill");
+  if (fill) {
+    fill.style.width = `${safe}%`;
+    fill.className = `progress-fill ${progressClass(safe)}`;
+  }
+}
+
+/**
  * Render a progress bar HTML string.
  * @param {number} pct
  * @param {string} [label]

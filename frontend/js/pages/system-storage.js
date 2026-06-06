@@ -69,9 +69,8 @@ function renderStatCards(storage) {
 }
 
 function renderCharts(history, storage) {
-  const root = primaryVolume(storage.volumes);
-
-  document.getElementById("charts").innerHTML = `
+  const container = document.getElementById("charts");
+  ensureChartLayout(container, `
     <div class="chart-panel">
       <div class="chart-title">Root Volume Usage</div>
       <div class="chart-container"><canvas id="chart-doughnut"></canvas></div>
@@ -83,10 +82,12 @@ function renderCharts(history, storage) {
     <div class="chart-panel full-width">
       <div class="chart-title">Disk Throughput (MB/s)</div>
       <div class="chart-container"><canvas id="chart-io"></canvas></div>
-    </div>`;
+    </div>`);
 
-  destroyChart(charts.doughnut);
-  charts.doughnut = createDoughnutChart(
+  const root = primaryVolume(storage.volumes);
+
+  charts.doughnut = upsertDoughnutChart(
+    charts.doughnut,
     document.getElementById("chart-doughnut"),
     ["Used", "Free"],
     [root.used_gb || 0, root.free_gb || 0],
@@ -96,8 +97,8 @@ function renderCharts(history, storage) {
   const usedHist = historyToDatasets(history, {
     disk_used_pct: { label: "Used %", color: CHART_COLORS.accent },
   });
-  destroyChart(charts.used);
-  charts.used = createLineChart(
+  charts.used = upsertLineChart(
+    charts.used,
     document.getElementById("chart-used"),
     usedHist.labels,
     usedHist.datasets,
@@ -108,8 +109,8 @@ function renderCharts(history, storage) {
     disk_read_mb_s: { label: "Read", color: CHART_COLORS.accent },
     disk_write_mb_s: { label: "Write", color: CHART_COLORS.purple },
   });
-  destroyChart(charts.io);
-  charts.io = createLineChart(
+  charts.io = upsertLineChart(
+    charts.io,
     document.getElementById("chart-io"),
     ioHist.labels,
     ioHist.datasets

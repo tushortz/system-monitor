@@ -71,18 +71,18 @@ function renderStatCards(network) {
 }
 
 function renderCharts(history) {
-  document.getElementById("charts").innerHTML = `
+  ensureChartLayout(document.getElementById("charts"), `
     <div class="chart-panel full-width">
       <div class="chart-title">Network Throughput (MB/s)</div>
       <div class="chart-container tall"><canvas id="chart-net"></canvas></div>
-    </div>`;
+    </div>`);
 
   const netHist = historyToDatasets(history, {
     net_sent_mb_s: { label: "Sent", color: CHART_COLORS.warning },
     net_recv_mb_s: { label: "Received", color: CHART_COLORS.teal },
   });
-  destroyChart(charts.net);
-  charts.net = createLineChart(
+  charts.net = upsertLineChart(
+    charts.net,
     document.getElementById("chart-net"),
     netHist.labels,
     netHist.datasets

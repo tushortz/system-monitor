@@ -77,7 +77,7 @@ function renderStatCards(s) {
 
 function renderCharts(history, grouped) {
   const container = document.getElementById("charts");
-  container.innerHTML = `
+  ensureChartLayout(container, `
     <div class="chart-panel">
       <div class="chart-title">Battery Level (%)</div>
       <div class="chart-container"><canvas id="chart-battery"></canvas></div>
@@ -89,13 +89,13 @@ function renderCharts(history, grouped) {
     <div class="chart-panel full-width">
       <div class="chart-title">Network Throughput (MB/s)</div>
       <div class="chart-container"><canvas id="chart-net"></canvas></div>
-    </div>`;
+    </div>`);
 
   const batHist = historyToDatasets(history, {
     battery_percent: { label: "Battery %", color: CHART_COLORS.success },
   });
-  destroyChart(charts.battery);
-  charts.battery = createLineChart(
+  charts.battery = upsertLineChart(
+    charts.battery,
     document.getElementById("chart-battery"),
     batHist.labels,
     batHist.datasets,
@@ -106,8 +106,8 @@ function renderCharts(history, grouped) {
     disk_read_mb_s: { label: "Read", color: CHART_COLORS.accent },
     disk_write_mb_s: { label: "Write", color: CHART_COLORS.purple },
   });
-  destroyChart(charts.disk);
-  charts.disk = createLineChart(
+  charts.disk = upsertLineChart(
+    charts.disk,
     document.getElementById("chart-disk"),
     diskHist.labels,
     diskHist.datasets
@@ -117,8 +117,8 @@ function renderCharts(history, grouped) {
     net_sent_mb_s: { label: "Sent", color: CHART_COLORS.warning },
     net_recv_mb_s: { label: "Received", color: CHART_COLORS.teal },
   });
-  destroyChart(charts.net);
-  charts.net = createLineChart(
+  charts.net = upsertLineChart(
+    charts.net,
     document.getElementById("chart-net"),
     netHist.labels,
     netHist.datasets

@@ -63,7 +63,7 @@ function renderStatCards(mem, swap) {
 
 function renderCharts(history, mem, swap) {
   const container = document.getElementById("charts");
-  container.innerHTML = `
+  ensureChartLayout(container, `
     <div class="chart-panel">
       <div class="chart-title">RAM Allocation</div>
       <div class="chart-container"><canvas id="chart-ram"></canvas></div>
@@ -75,18 +75,18 @@ function renderCharts(history, mem, swap) {
     <div class="chart-panel full-width">
       <div class="chart-title">Memory Usage Over Time</div>
       <div class="chart-container tall"><canvas id="chart-mem-history"></canvas></div>
-    </div>`;
+    </div>`);
 
-  destroyChart(charts.ram);
-  charts.ram = createDoughnutChart(
+  charts.ram = upsertDoughnutChart(
+    charts.ram,
     document.getElementById("chart-ram"),
     ["Used", "Available"],
     [mem.used_mb || 0, mem.available_mb || 0],
     [CHART_COLORS.accent, "#e2e2e2"]
   );
 
-  destroyChart(charts.swap);
-  charts.swap = createDoughnutChart(
+  charts.swap = upsertDoughnutChart(
+    charts.swap,
     document.getElementById("chart-swap"),
     ["Used", "Free"],
     [swap.used_mb || 0, swap.free_mb || 0],
@@ -97,8 +97,8 @@ function renderCharts(history, mem, swap) {
     memory_used_pct: { label: "RAM %", color: CHART_COLORS.accent },
     swap_used_pct: { label: "Swap %", color: CHART_COLORS.warning },
   });
-  destroyChart(charts.memHistory);
-  charts.memHistory = createLineChart(
+  charts.memHistory = upsertLineChart(
+    charts.memHistory,
     document.getElementById("chart-mem-history"),
     memHist.labels,
     memHist.datasets,

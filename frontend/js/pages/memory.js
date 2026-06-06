@@ -66,7 +66,7 @@ function renderStatCards(mem, perf) {
 
 function renderCharts(history, mem, processes) {
   const container = document.getElementById("charts");
-  container.innerHTML = `
+  ensureChartLayout(container, `
     <div class="chart-panel">
       <div class="chart-title">VRAM Allocation</div>
       <div class="chart-container"><canvas id="chart-doughnut"></canvas></div>
@@ -82,13 +82,13 @@ function renderCharts(history, mem, processes) {
     <div class="chart-panel full-width">
       <div class="chart-title">Memory Controller Utilization (%)</div>
       <div class="chart-container"><canvas id="chart-mem-ctrl"></canvas></div>
-    </div>`;
+    </div>`);
 
   const used = mem.used_mb || 0;
   const free = mem.free_mb || 0;
 
-  destroyChart(charts.doughnut);
-  charts.doughnut = createDoughnutChart(
+  charts.doughnut = upsertDoughnutChart(
+    charts.doughnut,
     document.getElementById("chart-doughnut"),
     ["Used", "Free"],
     [used, free],
@@ -104,8 +104,8 @@ function renderCharts(history, mem, processes) {
     procData.push(otherMem);
   }
 
-  destroyChart(charts.procMem);
-  charts.procMem = createBarChart(
+  charts.procMem = upsertBarChart(
+    charts.procMem,
     document.getElementById("chart-process-mem"),
     procLabels.length ? procLabels : ["No processes"],
     [{
@@ -119,8 +119,8 @@ function renderCharts(history, mem, processes) {
   const memHist = historyToDatasets(history, {
     memory_used_pct: { label: "VRAM Used %", color: CHART_COLORS.accent },
   });
-  destroyChart(charts.memHistory);
-  charts.memHistory = createLineChart(
+  charts.memHistory = upsertLineChart(
+    charts.memHistory,
     document.getElementById("chart-mem-history"),
     memHist.labels,
     memHist.datasets,
@@ -130,8 +130,8 @@ function renderCharts(history, mem, processes) {
   const ctrlHist = historyToDatasets(history, {
     memory_utilization: { label: "Controller %", color: CHART_COLORS.teal },
   });
-  destroyChart(charts.memCtrl);
-  charts.memCtrl = createLineChart(
+  charts.memCtrl = upsertLineChart(
+    charts.memCtrl,
     document.getElementById("chart-mem-ctrl"),
     ctrlHist.labels,
     ctrlHist.datasets,

@@ -59,17 +59,17 @@ function renderStatCards(b) {
 }
 
 function renderChart(history) {
-  document.getElementById("charts").innerHTML = `
+  ensureChartLayout(document.getElementById("charts"), `
     <div class="chart-panel full-width">
       <div class="chart-title">Battery Level Over Time</div>
       <div class="chart-container tall"><canvas id="chart-battery"></canvas></div>
-    </div>`;
+    </div>`);
 
   const batHist = historyToDatasets(history, {
     battery_percent: { label: "Battery %", color: CHART_COLORS.success },
   });
-  destroyChart(charts.battery);
-  charts.battery = createLineChart(
+  charts.battery = upsertLineChart(
+    charts.battery,
     document.getElementById("chart-battery"),
     batHist.labels,
     batHist.datasets,
