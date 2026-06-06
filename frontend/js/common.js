@@ -101,7 +101,18 @@ function updateStatus(health) {
   const isDemo = health.mode === "demo";
   dot.classList.toggle("demo", isDemo);
   const gpuLabel = isDemo ? "GPU demo" : "GPU live";
-  text.textContent = `${gpuLabel} · ${health.gpu_count} GPU · ${health.cpu_cores} CPU`;
+  const platformLabel = formatPlatform(health.platform);
+  text.textContent = `${gpuLabel} · ${health.gpu_count} GPU · ${health.cpu_cores} CPU · ${platformLabel}`;
+}
+
+/**
+ * Format OS platform name for display.
+ * @param {string} platform
+ * @returns {string}
+ */
+function formatPlatform(platform) {
+  const labels = { Darwin: "macOS", Windows: "Windows", Linux: "Linux" };
+  return labels[platform] || platform || "System";
 }
 
 /**

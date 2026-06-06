@@ -95,6 +95,7 @@ def health() -> dict[str, Any]:
         "cpu_mode": cpu_collector.get_mode(),
         "cpu_cores": cpu_collector.get_core_count(),
         "system_mode": system_collector.get_mode(),
+        "platform": system_collector.get_platform(),
     }
 
 
@@ -207,9 +208,10 @@ def cpu_history(metrics: str | None = None, core: int | None = None) -> dict[str
 
 @app.get("/api/system")
 def system_summary() -> dict[str, Any]:
-    """Return MacBook system summary metrics."""
+    """Return cross-platform system summary metrics."""
     return {
         "mode": system_collector.get_mode(),
+        "platform": system_collector.get_platform(),
         "summary": system_collector.get_summary(),
     }
 
@@ -222,7 +224,7 @@ def system_grouped_stats() -> dict[str, Any]:
 
 @app.get("/api/system/hardware")
 def system_hardware() -> dict[str, Any]:
-    """Return Mac hardware profile."""
+    """Return hardware profile for the current platform."""
     return system_collector.get_hardware()
 
 
@@ -246,7 +248,7 @@ def system_network() -> dict[str, Any]:
 
 @app.get("/api/system/software")
 def system_software() -> dict[str, Any]:
-    """Return macOS and runtime software information."""
+    """Return operating system and runtime software information."""
     return system_collector.get_software()
 
 

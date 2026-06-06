@@ -18,6 +18,13 @@ async function init() {
   }
 }
 
+function primaryVolume(volumes) {
+  const preferred = volumes.find((v) => v.mountpoint === "/") ||
+    volumes.find((v) => /^[A-Z]:\\$/i.test(v.mountpoint)) ||
+    volumes[0];
+  return preferred || {};
+}
+
 async function loadData() {
   const [storage, history] = await Promise.all([
     fetchSystemStorage(),
@@ -30,7 +37,7 @@ async function loadData() {
 }
 
 function renderStatCards(storage) {
-  const root = storage.volumes.find((v) => v.mountpoint === "/") || storage.volumes[0] || {};
+  const root = primaryVolume(storage.volumes);
   const io = storage.io || {};
 
   document.getElementById("stat-cards").innerHTML = `
@@ -62,7 +69,7 @@ function renderStatCards(storage) {
 }
 
 function renderCharts(history, storage) {
-  const root = storage.volumes.find((v) => v.mountpoint === "/") || {};
+  const root = primaryVolume(storage.volumes);
 
   document.getElementById("charts").innerHTML = `
     <div class="chart-panel">

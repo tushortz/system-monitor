@@ -1,4 +1,4 @@
-/** System hardware page — MacBook profile and software info. */
+/** System hardware page — platform hardware and software info. */
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -23,6 +23,7 @@ async function loadData() {
   ]);
 
   document.getElementById("stat-sections").innerHTML =
+    renderStatSection("Platform", flattenStatObject({ os_family: formatPlatform(hardware.platform) })) +
     renderStatSection("Hardware", flattenStatObject(hardware)) +
     renderStatSection("Software", flattenStatObject(software));
 }

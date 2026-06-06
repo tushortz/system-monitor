@@ -1,5 +1,7 @@
-"""macOS system statistics collector for MacBook hardware and I/O."""
+"""Cross-platform system statistics collector for macOS, Windows, and Linux."""
 
+import json
+import os
 import platform
 import re
 import subprocess
@@ -10,11 +12,11 @@ from typing import Any
 import psutil
 
 HARDWARE_CACHE_TTL_SEC = 300.0
-USER_MOUNT_PREFIXES = ("/", "/Volumes/", "/System/Volumes/Data")
+SYSTEM_NAME = platform.system()
 
 
 class SystemCollector:
-    """Collect MacBook system, battery, storage, and network statistics."""
+    """Collect system, battery, storage, and network metrics on all major OSes."""
 
     def __init__(self) -> None:
         self._hardware_cache: dict[str, Any] | None = None
@@ -23,9 +25,13 @@ class SystemCollector:
         self._prev_net_io: Any = None
         self._prev_sample_at: float | None = None
 
+    def get_platform(self) -> str:
+        """Return OS family name (Darwin, Windows, Linux)."""
+        return SYSTEM_NAME
+
     def get_mode(self) -> str:
         """Return collector mode label."""
-        return "live" if platform.system() == "Darwin" else "limited"
+        return "live"
 
     def get_summary(self) -> dict[str, Any]:
         """Return compact system summary for overview cards."""
@@ -34,13 +40,15 @@ class SystemCollector:
         storage = self.get_storage()
         network = self.get_network()
         software = self.get_software()
-        root = next((v for v in storage["volumes"] if v.get("mountpoint") == "/"), {})
-        primary_iface = network["interfaces"][0] if network["interfaces"] else {}
+        root = self._primary_volume(storage["volumes"])
+        primary_iface = self._primary_interface(network["interfaces"])
 
         return {
+            "platform": SYSTEM_NAME,
             "model_name": hw.get("model_name"),
-            "chip": hw.get("chip"),
+            "chip": hw.get("chip") or hw.get("cpu_brand"),
             "memory_gb": hw.get("memory_gb"),
+            "os_name": software.get("os_name"),
             "os_version": software.get("os_version"),
             "battery_percent": battery.get("percent"),
             "battery_plugged": battery.get("power_plugged"),
@@ -48,6 +56,7 @@ class SystemCollector:
             "disk_used_pct": root.get("used_pct"),
             "disk_total_gb": root.get("total_gb"),
             "disk_free_gb": root.get("free_gb"),
+            "disk_mountpoint": root.get("mountpoint"),
             "network_interface": primary_iface.get("name"),
             "network_connected": primary_iface.get("is_up"),
             "uptime_seconds": self._get_uptime_seconds(),
@@ -56,6 +65,7 @@ class SystemCollector:
     def get_grouped_stats(self) -> dict[str, Any]:
         """Return all system stats grouped by category."""
         return {
+            "platform": {"os_family": SYSTEM_NAME},
             "hardware": self.get_hardware(),
             "battery": self.get_battery(),
             "storage": self.get_storage(),
@@ -64,23 +74,22 @@ class SystemCollector:
         }
 
     def get_hardware(self) -> dict[str, Any]:
-        """Return Mac hardware profile."""
+        """Return hardware profile for the current platform."""
         profile = self._get_hardware_profile()
-        sysctl = self._get_sysctl_values({
-            "hw.model": "model_identifier",
-            "machdep.cpu.brand_string": "cpu_brand",
-            "hw.memsize": "memory_bytes",
-            "hw.ncpu": "logical_cores",
-            "hw.physicalcpu": "physical_cores",
-        })
-        memory_bytes = sysctl.get("memory_bytes")
+        memory_gb = profile.get("memory_gb")
+        if memory_gb is None:
+            memory_gb = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+
+        logical = psutil.cpu_count(logical=True)
+        physical = psutil.cpu_count(logical=False) or logical
+
         return {
             **profile,
-            "model_identifier": sysctl.get("model_identifier") or profile.get("model_identifier"),
-            "cpu_brand": sysctl.get("cpu_brand") or profile.get("chip"),
-            "logical_cores": sysctl.get("logical_cores"),
-            "physical_cores": sysctl.get("physical_cores") or profile.get("performance_cores"),
-            "memory_gb": round(memory_bytes / (1024 ** 3), 1) if memory_bytes else profile.get("memory_gb"),
+            "platform": SYSTEM_NAME,
+            "cpu_brand": profile.get("cpu_brand") or profile.get("chip") or platform.processor() or "Unknown",
+            "logical_cores": profile.get("logical_cores") or logical,
+            "physical_cores": profile.get("physical_cores") or physical,
+            "memory_gb": memory_gb,
             "architecture": platform.machine(),
             "hostname": platform.node(),
         }
@@ -88,30 +97,32 @@ class SystemCollector:
     def get_battery(self) -> dict[str, Any]:
         """Return battery status and power source information."""
         battery = psutil.sensors_battery()
-        pmset = self._parse_pmset_battery()
+        extra = self._platform_battery_details()
 
-        percent = battery.percent if battery else pmset.get("percent")
-        plugged = battery.power_plugged if battery else pmset.get("power_plugged")
+        percent = battery.percent if battery else extra.get("percent")
+        plugged = battery.power_plugged if battery else extra.get("power_plugged")
         secsleft = battery.secsleft if battery and battery.secsleft >= 0 else None
 
+        if plugged is None and extra.get("power_plugged") is not None:
+            plugged = extra.get("power_plugged")
+
         return {
-            "present": battery is not None or pmset.get("present", False),
+            "present": battery is not None or extra.get("present", False),
             "percent": round(percent, 1) if percent is not None else None,
             "power_plugged": plugged,
             "power_source": "AC Power" if plugged else "Battery Power",
-            "time_left_min": round(secsleft / 60) if secsleft is not None else pmset.get("time_left_min"),
-            "status": pmset.get("status"),
-            "charging": pmset.get("charging"),
-            "warnings": pmset.get("warnings", []),
+            "time_left_min": round(secsleft / 60) if secsleft is not None else extra.get("time_left_min"),
+            "status": extra.get("status"),
+            "charging": extra.get("charging") if extra.get("charging") is not None else bool(plugged and percent and percent < 100),
+            "warnings": extra.get("warnings", []),
+            "drawing_from": extra.get("drawing_from"),
         }
 
     def get_storage(self) -> dict[str, Any]:
         """Return disk volumes and I/O counters."""
         volumes: list[dict[str, Any]] = []
         for part in psutil.disk_partitions(all=False):
-            if not part.mountpoint.startswith(USER_MOUNT_PREFIXES):
-                continue
-            if part.fstype in ("devfs", "autofs"):
+            if not self._include_partition(part):
                 continue
             try:
                 usage = psutil.disk_usage(part.mountpoint)
@@ -127,7 +138,8 @@ class SystemCollector:
                 "used_pct": round(usage.percent, 1),
             })
 
-        volumes.sort(key=lambda v: (v["mountpoint"] != "/", v["mountpoint"]))
+        primary = self._primary_mountpoint()
+        volumes.sort(key=lambda v: (v["mountpoint"] != primary, v["mountpoint"]))
         io = psutil.disk_io_counters()
         rates = self._compute_io_rates()
 
@@ -150,16 +162,17 @@ class SystemCollector:
         stats = psutil.net_if_stats()
         io = psutil.net_io_counters(pernic=True)
         rates = self._compute_io_rates()
+        preferred = self._preferred_interface_names()
 
         interfaces: list[dict[str, Any]] = []
         for name, addr_list in addrs.items():
-            if name.startswith("lo") or name.startswith("gif") or name.startswith("stf"):
+            if self._skip_interface(name):
                 continue
             nic_stats = stats.get(name)
             nic_io = io.get(name)
-            ipv4 = next((a.address for a in addr_list if a.family.name == "AF_INET"), None)
-            ipv6 = next((a.address for a in addr_list if a.family.name == "AF_INET6"), None)
-            mac = next((a.address for a in addr_list if a.family.name == "AF_LINK"), None)
+            ipv4 = self._address_for_family(addr_list, {"AF_INET", "2"})
+            ipv6 = self._address_for_family(addr_list, {"AF_INET6", "23"})
+            mac = self._address_for_family(addr_list, {"AF_LINK", "AF_PACKET", "-1", "17"})
 
             interfaces.append({
                 "name": name,
@@ -177,7 +190,14 @@ class SystemCollector:
                 "errors_out": nic_io.errout if nic_io else 0,
             })
 
-        interfaces.sort(key=lambda i: (not i["is_up"], i["name"] != "en0", i["name"]))
+        interfaces.sort(
+            key=lambda i: (
+                not i["is_up"],
+                i["name"] not in preferred,
+                preferred.index(i["name"]) if i["name"] in preferred else 999,
+                i["name"],
+            )
+        )
         total = psutil.net_io_counters()
 
         return {
@@ -191,12 +211,14 @@ class SystemCollector:
         }
 
     def get_software(self) -> dict[str, Any]:
-        """Return macOS and runtime software information."""
-        sw = self._get_sw_vers()
+        """Return operating system and runtime software information."""
+        os_info = self._get_os_info()
         return {
-            "os_name": sw.get("product_name") or platform.system(),
-            "os_version": sw.get("product_version") or platform.release(),
-            "build_version": sw.get("build_version"),
+            "platform": SYSTEM_NAME,
+            "os_name": os_info.get("os_name") or platform.system(),
+            "os_version": os_info.get("os_version") or platform.release(),
+            "build_version": os_info.get("build_version"),
+            "edition": os_info.get("edition"),
             "kernel_version": platform.release(),
             "python_version": platform.python_version(),
             "boot_time": datetime.fromtimestamp(psutil.boot_time(), tz=timezone.utc).isoformat(),
@@ -208,7 +230,7 @@ class SystemCollector:
         battery = self.get_battery()
         storage = self.get_storage()
         network = self.get_network()
-        root = next((v for v in storage["volumes"] if v.get("mountpoint") == "/"), {})
+        root = self._primary_volume(storage["volumes"])
         io = storage.get("io", {})
         total = network.get("total", {})
 
@@ -222,20 +244,240 @@ class SystemCollector:
         }
 
     def _get_hardware_profile(self) -> dict[str, Any]:
-        """Return cached hardware profile from system_profiler."""
+        """Return cached platform-specific hardware profile."""
         now = time.time()
         if self._hardware_cache and now - self._hardware_cached_at < HARDWARE_CACHE_TTL_SEC:
             return self._hardware_cache
 
-        profile: dict[str, Any] = {}
-        if platform.system() == "Darwin":
-            output = self._run_command(["system_profiler", "SPHardwareDataType"])
-            if output:
-                profile = self._parse_system_profiler(output)
+        if SYSTEM_NAME == "Darwin":
+            profile = self._hardware_darwin()
+        elif SYSTEM_NAME == "Windows":
+            profile = self._hardware_windows()
+        elif SYSTEM_NAME == "Linux":
+            profile = self._hardware_linux()
+        else:
+            profile = self._hardware_generic()
 
         self._hardware_cache = profile
         self._hardware_cached_at = now
         return profile
+
+    def _hardware_darwin(self) -> dict[str, Any]:
+        """Collect hardware details on macOS."""
+        profile: dict[str, Any] = {}
+        output = self._run_command(["system_profiler", "SPHardwareDataType"])
+        if output:
+            profile = self._parse_system_profiler(output)
+
+        sysctl = self._get_sysctl_values({
+            "hw.model": "model_identifier",
+            "machdep.cpu.brand_string": "cpu_brand",
+            "hw.memsize": "memory_bytes",
+            "hw.ncpu": "logical_cores",
+            "hw.physicalcpu": "physical_cores",
+        })
+        memory_bytes = sysctl.get("memory_bytes")
+        if memory_bytes:
+            profile["memory_gb"] = round(memory_bytes / (1024 ** 3), 1)
+        profile.update({k: v for k, v in sysctl.items() if k != "memory_bytes"})
+        if not profile.get("chip"):
+            profile["chip"] = sysctl.get("cpu_brand")
+        return profile
+
+    def _hardware_linux(self) -> dict[str, Any]:
+        """Collect hardware details on Linux."""
+        vendor = self._read_text_file("/sys/class/dmi/id/sys_vendor")
+        product = self._read_text_file("/sys/class/dmi/id/product_name")
+        version = self._read_text_file("/sys/class/dmi/id/product_version")
+        board = self._read_text_file("/sys/class/dmi/id/board_name")
+        cpu_brand = self._linux_cpu_model()
+
+        model_name = " ".join(p for p in [vendor, product] if p) or board or "Linux PC"
+        return {
+            "model_name": model_name.strip(),
+            "model_identifier": version,
+            "manufacturer": vendor,
+            "product_name": product,
+            "board_name": board,
+            "chip": cpu_brand,
+            "cpu_brand": cpu_brand,
+        }
+
+    def _hardware_windows(self) -> dict[str, Any]:
+        """Collect hardware details on Windows via CIM."""
+        profile: dict[str, Any] = {}
+        system = self._powershell_json(
+            "Get-CimInstance Win32_ComputerSystem | "
+            "Select-Object Manufacturer,Model,TotalPhysicalMemory | ConvertTo-Json -Compress"
+        )
+        processor = self._powershell_json(
+            "Get-CimInstance Win32_Processor | "
+            "Select-Object Name,NumberOfCores,NumberOfLogicalProcessors | ConvertTo-Json -Compress"
+        )
+
+        if isinstance(system, dict):
+            manufacturer = system.get("Manufacturer")
+            model = system.get("Model")
+            profile["manufacturer"] = manufacturer
+            profile["model_name"] = f"{manufacturer} {model}".strip() if manufacturer or model else None
+            memory = system.get("TotalPhysicalMemory")
+            if memory:
+                profile["memory_gb"] = round(int(memory) / (1024 ** 3), 1)
+
+        if isinstance(processor, dict):
+            profile["cpu_brand"] = processor.get("Name")
+            profile["chip"] = processor.get("Name")
+            profile["physical_cores"] = processor.get("NumberOfCores")
+            profile["logical_cores"] = processor.get("NumberOfLogicalProcessors")
+        elif isinstance(processor, list) and processor:
+            first = processor[0]
+            profile["cpu_brand"] = first.get("Name")
+            profile["chip"] = first.get("Name")
+            profile["physical_cores"] = first.get("NumberOfCores")
+            profile["logical_cores"] = first.get("NumberOfLogicalProcessors")
+
+        if not profile:
+            return self._hardware_generic()
+        return profile
+
+    def _hardware_generic(self) -> dict[str, Any]:
+        """Fallback hardware profile from Python platform module."""
+        uname = platform.uname()
+        return {
+            "model_name": uname.node or platform.node(),
+            "cpu_brand": platform.processor() or uname.processor,
+            "chip": platform.processor() or uname.processor,
+        }
+
+    def _get_os_info(self) -> dict[str, str]:
+        """Return OS name and version for the current platform."""
+        if SYSTEM_NAME == "Darwin":
+            return self._get_sw_vers()
+        if SYSTEM_NAME == "Linux":
+            return self._parse_os_release()
+        if SYSTEM_NAME == "Windows":
+            return self._get_windows_os_info()
+        uname = platform.uname()
+        return {"os_name": uname.system, "os_version": uname.release}
+
+    def _platform_battery_details(self) -> dict[str, Any]:
+        """Return platform-specific battery metadata."""
+        if SYSTEM_NAME == "Darwin":
+            return self._parse_pmset_battery()
+        return {"present": psutil.sensors_battery() is not None}
+
+    def _primary_mountpoint(self) -> str:
+        """Return primary system volume mount point."""
+        if SYSTEM_NAME == "Windows":
+            return os.environ.get("SystemDrive", "C:") + "\\"
+        return "/"
+
+    def _primary_volume(self, volumes: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the primary system volume from a volume list."""
+        primary = self._primary_mountpoint()
+        return next((v for v in volumes if v.get("mountpoint") == primary), volumes[0] if volumes else {})
+
+    def _primary_interface(self, interfaces: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the preferred active network interface."""
+        preferred = self._preferred_interface_names()
+        for name in preferred:
+            match = next((i for i in interfaces if i["name"] == name), None)
+            if match:
+                return match
+        return interfaces[0] if interfaces else {}
+
+    def _preferred_interface_names(self) -> list[str]:
+        """Return preferred interface names ordered by platform."""
+        if SYSTEM_NAME == "Darwin":
+            return ["en0", "en1"]
+        if SYSTEM_NAME == "Windows":
+            return ["Ethernet", "Wi-Fi", "Wi-Fi 2", "WLAN"]
+        return ["eth0", "enp0s3", "enp0s31f6", "wlan0", "wlo1", "eno1"]
+
+    def _include_partition(self, part: Any) -> bool:
+        """Return True when a partition should appear in storage stats."""
+        if SYSTEM_NAME == "Windows":
+            return len(part.mountpoint) >= 2 and part.mountpoint[1] == ":"
+
+        skip_fstypes = {"devfs", "autofs", "tmpfs", "devtmpfs", "squashfs", "overlay", "tracefs", "proc", "sysfs", "cgroup", "cgroup2"}
+        if part.fstype in skip_fstypes:
+            return False
+
+        if SYSTEM_NAME == "Darwin":
+            return part.mountpoint.startswith(("/", "/Volumes/"))
+
+        if SYSTEM_NAME == "Linux":
+            skip_prefixes = ("/snap", "/run", "/dev", "/sys", "/proc", "/var/lib/docker", "/var/snap")
+            if part.mountpoint.startswith(skip_prefixes):
+                return False
+            return True
+
+        return True
+
+    def _skip_interface(self, name: str) -> bool:
+        """Return True when a network interface should be hidden."""
+        lowered = name.lower()
+        if SYSTEM_NAME == "Windows":
+            return "loopback" in lowered or lowered.startswith("isatap") or lowered.startswith("teredo")
+        if lowered.startswith(("lo", "gif", "stf", "docker", "veth", "br-", "virbr")):
+            return True
+        return False
+
+    def _address_for_family(self, addr_list: list[Any], families: set[str]) -> str | None:
+        """Return the first address matching a socket address family."""
+        for addr in addr_list:
+            family = str(addr.family.name if hasattr(addr.family, "name") else addr.family)
+            if family in families:
+                return addr.address
+        return None
+
+    def _linux_cpu_model(self) -> str | None:
+        """Parse CPU model from /proc/cpuinfo on Linux."""
+        content = self._read_text_file("/proc/cpuinfo")
+        if not content:
+            return None
+        for line in content.splitlines():
+            if line.lower().startswith("model name"):
+                return line.split(":", 1)[1].strip()
+        return None
+
+    def _parse_os_release(self) -> dict[str, str]:
+        """Parse /etc/os-release on Linux."""
+        content = self._read_text_file("/etc/os-release")
+        if not content:
+            return {}
+        values: dict[str, str] = {}
+        for line in content.splitlines():
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"')
+        return {
+            "os_name": values.get("NAME") or values.get("PRETTY_NAME"),
+            "os_version": values.get("VERSION_ID") or values.get("VERSION"),
+            "build_version": values.get("BUILD_ID"),
+            "edition": values.get("VARIANT"),
+        }
+
+    def _get_windows_os_info(self) -> dict[str, str]:
+        """Return Windows version details."""
+        data = self._powershell_json(
+            "Get-CimInstance Win32_OperatingSystem | "
+            "Select-Object Caption,Version,BuildNumber | ConvertTo-Json -Compress"
+        )
+        if isinstance(data, dict):
+            return {
+                "os_name": data.get("Caption"),
+                "os_version": data.get("Version"),
+                "build_version": data.get("BuildNumber"),
+            }
+
+        name, version, build, _platform = platform.win32_ver()
+        return {
+            "os_name": name or "Windows",
+            "os_version": version or platform.release(),
+            "build_version": build,
+        }
 
     def _parse_system_profiler(self, output: str) -> dict[str, Any]:
         """Parse key fields from system_profiler hardware output."""
@@ -279,8 +521,6 @@ class SystemCollector:
 
     def _parse_pmset_battery(self) -> dict[str, Any]:
         """Parse pmset battery output on macOS."""
-        if platform.system() != "Darwin":
-            return {}
         output = self._run_command(["pmset", "-g", "batt"])
         if not output:
             return {}
@@ -311,8 +551,6 @@ class SystemCollector:
 
     def _get_sw_vers(self) -> dict[str, str]:
         """Return macOS product version information."""
-        if platform.system() != "Darwin":
-            return {}
         output = self._run_command(["sw_vers"])
         if not output:
             return {}
@@ -324,10 +562,14 @@ class SystemCollector:
                 parsed["product_version"] = line.split(":", 1)[1].strip()
             elif "BuildVersion" in line:
                 parsed["build_version"] = line.split(":", 1)[1].strip()
-        return parsed
+        return {
+            "os_name": parsed.get("product_name"),
+            "os_version": parsed.get("product_version"),
+            "build_version": parsed.get("build_version"),
+        }
 
     def _get_sysctl_values(self, keys: dict[str, str]) -> dict[str, Any]:
-        """Read multiple sysctl values."""
+        """Read multiple sysctl values on macOS/BSD."""
         result: dict[str, Any] = {}
         for sysctl_key, label in keys.items():
             value = self._run_command(["sysctl", "-n", sysctl_key])
@@ -341,6 +583,21 @@ class SystemCollector:
             else:
                 result[label] = value
         return result
+
+    def _powershell_json(self, command: str) -> Any:
+        """Run a PowerShell command and parse JSON output on Windows."""
+        if SYSTEM_NAME != "Windows":
+            return None
+        output = self._run_command(
+            ["powershell", "-NoProfile", "-Command", command],
+            timeout=12,
+        )
+        if not output:
+            return None
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError:
+            return None
 
     def _compute_io_rates(self) -> dict[str, float]:
         """Compute disk and network throughput since last sample."""
@@ -374,14 +631,22 @@ class SystemCollector:
         """Return system uptime in seconds."""
         return round(time.time() - psutil.boot_time())
 
-    def _run_command(self, cmd: list[str]) -> str | None:
-        """Run a read-only shell command safely."""
+    def _read_text_file(self, path: str) -> str | None:
+        """Read a small text file when permitted."""
+        try:
+            with open(path, encoding="utf-8", errors="ignore") as handle:
+                return handle.read().strip()
+        except OSError:
+            return None
+
+    def _run_command(self, cmd: list[str], timeout: int = 8) -> str | None:
+        """Run a read-only command safely."""
         try:
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=8,
+                timeout=timeout,
                 check=False,
             )
             if result.returncode != 0:

@@ -18,6 +18,15 @@ async function init() {
   }
 }
 
+function preferredInterface(interfaces) {
+  const names = ["en0", "Ethernet", "Wi-Fi", "eth0", "wlan0"];
+  for (const name of names) {
+    const match = interfaces.find((i) => i.name === name);
+    if (match) return match;
+  }
+  return interfaces.find((i) => i.is_up) || interfaces[0] || {};
+}
+
 async function loadData() {
   const [network, history] = await Promise.all([
     fetchSystemNetwork(),
@@ -31,7 +40,7 @@ async function loadData() {
 
 function renderStatCards(network) {
   const total = network.total || {};
-  const primary = network.interfaces.find((i) => i.name === "en0") || network.interfaces[0] || {};
+  const primary = preferredInterface(network.interfaces);
 
   document.getElementById("stat-cards").innerHTML = `
     <div class="card">

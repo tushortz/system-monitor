@@ -209,7 +209,7 @@ class CpuCollector:
             if not temps:
                 return {"cpu_c": None}
 
-            for key in ("coretemp", "cpu_thermal", "k10temp", "zenpower", "apple"):
+            for key in ("coretemp", "cpu_thermal", "k10temp", "zenpower", "apple", "acpitz", "cpu-thermal"):
                 if key in temps and temps[key]:
                     current = temps[key][0].current
                     return {"cpu_c": round(current, 1) if current is not None else None}

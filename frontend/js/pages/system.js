@@ -1,4 +1,4 @@
-/** System overview page — MacBook summary and I/O charts. */
+/** System overview page — cross-platform system summary and I/O charts. */
 
 let charts = {};
 
@@ -36,15 +36,17 @@ async function loadData() {
 }
 
 function renderMachineBanner(summary, software) {
+  const osLabel = summary.os_name || software?.os_name || formatPlatform(summary.platform);
+  const osVersion = summary.os_version || software?.os_version || "—";
   document.getElementById("machine-banner").innerHTML = `
     <div class="gpu-card-header">
       <div>
-        <div class="gpu-name">${summary.model_name || "MacBook"}</div>
+        <div class="gpu-name">${summary.model_name || osLabel}</div>
         <div style="font-size:0.875rem;color:var(--color-text-secondary);margin-top:4px">
-          ${summary.chip || ""} · ${formatValue(summary.memory_gb, "GB RAM")} · macOS ${summary.os_version || software?.os_version || "—"}
+          ${summary.chip || ""}${summary.chip && summary.memory_gb ? " · " : ""}${summary.memory_gb ? `${formatValue(summary.memory_gb, "GB RAM")}` : ""}${(summary.chip || summary.memory_gb) ? " · " : ""}${osLabel} ${osVersion}
         </div>
       </div>
-      <span class="gpu-index">${software?.os_name || "macOS"}</span>
+      <span class="gpu-index">${formatPlatform(summary.platform)}</span>
     </div>`;
 }
 
@@ -60,7 +62,7 @@ function renderStatCards(s) {
       <div class="card-label">Disk Used</div>
       <div class="card-value">${formatValue(s.disk_used_pct, "%")}</div>
       ${renderProgressBar(s.disk_used_pct, "Disk usage")}
-      <div class="card-delta">${formatValue(s.disk_free_gb, "GB free")} of ${formatValue(s.disk_total_gb, "GB")}</div>
+      <div class="card-delta">${formatValue(s.disk_free_gb, "GB free")} of ${formatValue(s.disk_total_gb, "GB")}${s.disk_mountpoint ? ` · ${s.disk_mountpoint}` : ""}</div>
     </div>
     <div class="card">
       <div class="card-label">Primary Network</div>
