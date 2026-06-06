@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU Monitor — All Details</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="/static/js/api.js" defer></script>
+  <script src="/static/js/common.js" defer></script>
+  <script src="/static/js/pages/details.js" defer></script>
+</head>
+<body>
+  <header id="nav"></header>
+  <main class="container">
+    <div class="page-header">
+      <h1 class="page-title">All Details</h1>
+      <p class="page-subtitle">Complete GPU information grouped by category</p>
+    </div>
+    <div class="toolbar">
+      <div id="gpu-selector"></div>
+      <button class="btn btn-secondary" id="refresh-btn" type="button">Refresh</button>
+    </div>
+    <div id="driver-info" class="stat-section hidden">
+      <div class="stat-section-header">Driver &amp; System</div>
+      <table class="stat-table" id="driver-table"></table>
+    </div>
+    <div id="stat-sections"></div>
+  </main>
+</body>
+</html>

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU &amp; CPU Monitor — Overview</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="/static/js/api.js" defer></script>
+  <script src="/static/js/common.js" defer></script>
+  <script src="/static/js/charts.js" defer></script>
+  <script src="/static/js/pages/overview.js" defer></script>
+</head>
+<body>
+  <header id="nav"></header>
+  <main class="container">
+    <div class="page-header">
+      <h1 class="page-title">Overview</h1>
+      <p class="page-subtitle">Real-time summary of all detected GPUs</p>
+    </div>
+    <div id="demo-banner" class="alert alert-info hidden"></div>
+    <div id="content"><p class="loading">Loading GPU data…</p></div>
+  </main>
+</body>
+</html>

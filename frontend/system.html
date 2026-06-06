@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU &amp; CPU Monitor — System Overview</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+  <script src="/static/js/api.js" defer></script>
+  <script src="/static/js/common.js" defer></script>
+  <script src="/static/js/charts.js" defer></script>
+  <script src="/static/js/pages/system.js" defer></script>
+</head>
+<body>
+  <header id="nav"></header>
+  <main class="container">
+    <div class="page-header">
+      <h1 class="page-title">System Overview</h1>
+      <p class="page-subtitle">MacBook hardware, battery, storage, and network at a glance</p>
+    </div>
+    <div id="machine-banner" class="gpu-card" style="margin-bottom:var(--spacing-lg)"></div>
+    <div id="stat-cards" class="card-grid"></div>
+    <div id="charts" class="chart-grid"></div>
+  </main>
+</body>
+</html>
